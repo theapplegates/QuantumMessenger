@@ -10,10 +10,12 @@ struct ComposeView: View {
     @State private var showContactPicker = false
     @State private var showAddContact = false
     @State private var copiedOutput = false
+    @State private var signMessage = true
 
     // Add Contact fields
     @State private var newContactName = ""
     @State private var newContactKey = ""
+    @State private var newContactSigningKey = ""
 
     var body: some View {
         NavigationStack {
@@ -68,6 +70,28 @@ struct ComposeView: View {
                     Text("Message")
                 }
 
+                // Signing toggle
+                Section {
+                    Toggle(isOn: $signMessage) {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Sign with ML-DSA-65")
+                                    .font(.body)
+                                Text(appState.hasSigningKeyPair
+                                    ? "Adds post-quantum signature for authenticity"
+                                    : "No signing key — generate one in Keys tab")
+                                    .font(.caption)
+                                    .foregroundStyle(appState.hasSigningKeyPair ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.orange))
+                            }
+                        } icon: {
+                            Image(systemName: "signature")
+                        }
+                    }
+                    .disabled(!appState.hasSigningKeyPair)
+                } header: {
+                    Text("Security Options")
+                }
+
                 // Encrypt Button
                 Section {
                     Button {
@@ -75,12 +99,19 @@ struct ComposeView: View {
                     } label: {
                         HStack {
                             Spacer()
-                            Label("Encrypt Message", systemImage: "lock.fill")
-                                .font(.headline)
+                            Label(
+                                signMessage && appState.hasSigningKeyPair
+                                    ? "Encrypt & Sign"
+                                    : "Encrypt Message",
+                                systemImage: signMessage && appState.hasSigningKeyPair
+                                    ? "lock.and.key.fill"
+                                    : "lock.fill"
+                            )
+                            .font(.headline)
                             Spacer()
                         }
                     }
-                    .disabled(selectedContact == nil || messageText.isEmpty)
+                    .disabled(selectedContact == nil || messageText.isEmpty || !appState.hasKeyPair)
                 }
 
                 // Encrypted Output
@@ -95,9 +126,16 @@ struct ComposeView: View {
                                     .foregroundStyle(.green)
                             }
 
-                            Text("Ciphersuite: XWingMLKEM768X25519_SHA256_AES_GCM_256")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                            HStack(spacing: 8) {
+                                Text("XWing · AES-GCM-256")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                if signMessage && appState.hasSigningKeyPair {
+                                    Label("Signed", systemImage: "checkmark.seal.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(.blue)
+                                }
+                            }
 
                             Text(String(output.prefix(200)) + "...")
                                 .font(.system(.caption2, design: .monospaced))
@@ -186,18 +224,34 @@ struct ComposeView: View {
                         .fontDesign(.monospaced)
                         .font(.caption)
                 } header: {
-                    Text("Public Key (Base64)")
+                    Text("X-Wing Public Key (Base64)")
                 } footer: {
-                    Text("Paste the recipient's X-Wing public key in Base64 format.")
+                    Text("Paste the recipient's X-Wing encryption public key in Base64 format.")
+                }
+
+                Section {
+                    TextEditor(text: $newContactSigningKey)
+                        .frame(minHeight: 60)
+                        .fontDesign(.monospaced)
+                        .font(.caption)
+                } header: {
+                    Text("ML-DSA-65 Signing Key (Base64, Optional)")
+                } footer: {
+                    Text("Paste the recipient's ML-DSA-65 signing public key to enable signature verification.")
                 }
 
                 Section {
                     Button("Add Contact") {
-                        appState.addContact(name: newContactName, publicKeyBase64: newContactKey)
+                        appState.addContact(
+                            name: newContactName,
+                            publicKeyBase64: newContactKey,
+                            signingPublicKeyBase64: newContactSigningKey.isEmpty ? nil : newContactSigningKey
+                        )
                         if !appState.showError {
                             selectedContact = appState.contacts.last
                             newContactName = ""
                             newContactKey = ""
+                            newContactSigningKey = ""
                             showAddContact = false
                         }
                     }
@@ -210,6 +264,7 @@ struct ComposeView: View {
                     Button("Cancel") {
                         newContactName = ""
                         newContactKey = ""
+                        newContactSigningKey = ""
                         showAddContact = false
                     }
                 }
@@ -221,7 +276,8 @@ struct ComposeView: View {
 
     private func encryptMessage() {
         guard let contact = selectedContact else { return }
-        guard let envelope = appState.encryptMessage(to: contact, plaintext: messageText) else {
+        let shouldSign = signMessage && appState.hasSigningKeyPair
+        guard let envelope = appState.encryptMessage(to: contact, plaintext: messageText, withSignature: shouldSign) else {
             return
         }
         if let base64 = try? envelope.toBase64String() {

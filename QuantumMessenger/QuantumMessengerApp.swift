@@ -5,6 +5,13 @@ import SwiftUI
 struct QuantumMessengerApp: App {
     @State private var appState = AppState()
 
+    init() {
+        // One-time migration: move any keys previously stored in UserDefaults
+        // into the real iOS Keychain. Safe to call on every launch — it is a no-op
+        // once migration has already occurred.
+        KeychainService.migrateFromUserDefaultsIfNeeded()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

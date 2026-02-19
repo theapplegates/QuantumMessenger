@@ -1,0 +1,24 @@
+# Xcode
+build/
+DerivedData/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcuserstate
+project.xcworkspace/
+xcuserdata/
+
+# Swift Package Manager
+.swiftpm/
+Packages/
+
+# Carthage / CocoaPods
+Carthage/Build/
+Pods/
+
+# IDE & OS
+.idea/
+*.swp
+*.swo
+.DS_Store

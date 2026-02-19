@@ -41,6 +41,19 @@ struct EncryptedMessage: Identifiable, Codable {
         let prefix = String(base64.prefix(32))
         return "\(prefix)..."
     }
+
+    /// Returns a copy of this message with decryptedContent and signatureVerified cleared.
+    /// Used by KeychainService to ensure plaintext is never written to disk.
+    func withoutDecryptedContent() -> EncryptedMessage {
+        EncryptedMessage(
+            id: id,
+            senderName: senderName,
+            timestamp: timestamp,
+            encryptedEnvelope: encryptedEnvelope,
+            decryptedContent: nil,
+            signatureVerified: nil
+        )
+    }
 }
 
 /// Represents a contact whose public key we have

@@ -387,6 +387,112 @@ final class CryptoService {
         return try decrypt(envelope: envelope, privateKey: privateKey)
     }
 
+    // MARK: - Key Fingerprint Utilities
+
+    /// Compute a SHA-512 fingerprint of key data, formatted as space-separated 4-char uppercase groups
+    /// Uses first 20 bytes (160 bits) of SHA-512 hash — matches pgp-fancy repo convention
+    static func fingerprint(of keyData: Data) -> String {
+        let hash = SHA512.hash(data: keyData)
+        let bytes = Array(hash.prefix(20))
+        let hex = bytes.map { String(format: "%02X", $0) }.joined()
+        return stride(from: 0, to: hex.count, by: 4)
+            .map { String(hex.dropFirst($0).prefix(4)) }
+            .joined(separator: " ")
+    }
+
+    /// Compute the Key ID (last 8 bytes of SHA-512 hash, as 16 uppercase hex chars)
+    static func keyID(for keyData: Data) -> String {
+        let hash = SHA512.hash(data: keyData)
+        let bytes = Array(hash)
+        return bytes[(bytes.count - 8)...].map { String(format: "%02X", $0) }.joined()
+    }
+
+    // MARK: - PGP-Armored Block Formatting
+
+    /// Format an XWing public key as a PGP-armored block
+    static func pgpPublicKeyBlock(keyData: Data, userId: String, validFrom: String) -> String {
+        let (name, email) = parseUserId(userId)
+        let fp = fingerprint(of: keyData)
+        let header = """
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+Comment: User ID:\t\(name) <\(email)>
+Comment: Valid from:\t\(validFrom)
+Comment: Type:\tX-Wing ML-KEM-768 + X25519 (Post-Quantum Hybrid KEM)
+Comment: Usage:\tEncryption (HPKE AES-GCM-256)
+Comment: Fingerprint:\t\(fp) (SHA-512)
+"""
+        let body = base64Lines(keyData)
+        return "\(header)\n\(body)\n-----END PGP PUBLIC KEY BLOCK-----"
+    }
+
+    /// Format an XWing private key as a PGP-armored block
+    static func pgpPrivateKeyBlock(keyData: Data, userId: String) -> String {
+        let (name, email) = parseUserId(userId)
+        let fp = fingerprint(of: keyData)
+        let header = """
+-----BEGIN PGP PRIVATE KEY BLOCK-----
+Comment: User ID:\t\(name) <\(email)>
+Comment: Type:\tX-Wing ML-KEM-768 + X25519
+Comment: Fingerprint:\t\(fp) (SHA-512)
+"""
+        let body = base64Lines(keyData)
+        return "\(header)\n\(body)\n-----END PGP PRIVATE KEY BLOCK-----"
+    }
+
+    /// Format an ML-DSA-65 signing public key as a PGP-armored block
+    static func pgpSigningPublicKeyBlock(keyData: Data, userId: String, validFrom: String) -> String {
+        let (name, email) = parseUserId(userId)
+        let fp = fingerprint(of: keyData)
+        let header = """
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+Comment: User ID:\t\(name) <\(email)>
+Comment: Valid from:\t\(validFrom)
+Comment: Type:\tML-DSA-65 (Post-Quantum Digital Signature, FIPS 204)
+Comment: Usage:\tPost-Quantum Digital Signing
+Comment: Fingerprint:\t\(fp) (SHA-512)
+"""
+        let body = base64Lines(keyData)
+        return "\(header)\n\(body)\n-----END PGP PUBLIC KEY BLOCK-----"
+    }
+
+    /// Format an ML-DSA-65 signing private key as a PGP-armored block
+    static func pgpSigningPrivateKeyBlock(keyData: Data, userId: String) -> String {
+        let (name, email) = parseUserId(userId)
+        let fp = fingerprint(of: keyData)
+        let header = """
+-----BEGIN PGP PRIVATE KEY BLOCK-----
+Comment: User ID:\t\(name) <\(email)>
+Comment: Type:\tML-DSA-65 (Post-Quantum Digital Signature, FIPS 204)
+Comment: Fingerprint:\t\(fp) (SHA-512)
+"""
+        let body = base64Lines(keyData)
+        return "\(header)\n\(body)\n-----END PGP PRIVATE KEY BLOCK-----"
+    }
+
+    // MARK: - Private Utilities
+
+    /// Parse "Name <email>" format, returning (name, email)
+    private static func parseUserId(_ userId: String) -> (name: String, email: String) {
+        // Try to match "Name <email>" pattern
+        if let ltRange = userId.range(of: "<"),
+           let gtRange = userId.range(of: ">"),
+           ltRange.upperBound <= gtRange.lowerBound {
+            let name = String(userId[userId.startIndex..<ltRange.lowerBound])
+                .trimmingCharacters(in: .whitespaces)
+            let email = String(userId[ltRange.upperBound..<gtRange.lowerBound])
+            return (name, email)
+        }
+        return (userId, "")
+    }
+
+    /// Encode data as base64 with 64-char line breaks
+    private static func base64Lines(_ data: Data) -> String {
+        let b64 = data.base64EncodedString()
+        return stride(from: 0, to: b64.count, by: 64)
+            .map { String(b64.dropFirst($0).prefix(64)) }
+            .joined(separator: "\n")
+    }
+
     /// Encrypt AND sign a message for maximum security
     /// - Parameters:
     ///   - message: The plaintext message to encrypt and sign

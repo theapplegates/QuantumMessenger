@@ -123,7 +123,7 @@ struct MessageRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Header
+            // Header row: lock icon + sender + date
             HStack {
                 Image(systemName: message.isDecrypted ? "lock.open.fill" : "lock.fill")
                     .foregroundStyle(message.isDecrypted ? .green : .orange)
@@ -133,6 +133,11 @@ struct MessageRow: View {
                 Text(message.formattedDate)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+            }
+
+            // Signature badge (shown when signed or after decryption reveals status)
+            if message.isSigned {
+                signatureBadge
             }
 
             // Content
@@ -152,7 +157,7 @@ struct MessageRow: View {
                     Button {
                         onDecrypt()
                     } label: {
-                        Label("Decrypt", systemImage: "key.fill")
+                        Label("Decrypt & Verify", systemImage: "key.fill")
                             .font(.caption)
                     }
                     .buttonStyle(.borderedProminent)
@@ -161,5 +166,36 @@ struct MessageRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    // MARK: - Signature Badge
+
+    @ViewBuilder
+    private var signatureBadge: some View {
+        if let verified = message.signatureVerified {
+            if verified {
+                Label("ML-DSA-65 Verified", systemImage: "checkmark.seal.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.blue)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.blue.opacity(0.1), in: Capsule())
+            } else {
+                Label("Signature Invalid", systemImage: "xmark.seal.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.red.opacity(0.1), in: Capsule())
+            }
+        } else {
+            // Signed but we don't have sender's key to verify
+            Label("Signed · Unverified", systemImage: "signature")
+                .font(.caption2)
+                .foregroundStyle(.orange)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.orange.opacity(0.1), in: Capsule())
+        }
     }
 }

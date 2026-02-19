@@ -18,6 +18,42 @@ final class AppState {
     var errorMessage: String?
     var showError: Bool = false
 
+    // MARK: - User Identity
+
+    var userName: String = "" {
+        didSet { UserDefaults.standard.set(userName, forKey: "com.quantummessenger.userName") }
+    }
+    var userEmail: String = "" {
+        didSet { UserDefaults.standard.set(userEmail, forKey: "com.quantummessenger.userEmail") }
+    }
+    var keyCreatedAt: Date? = nil {
+        didSet {
+            if let d = keyCreatedAt {
+                UserDefaults.standard.set(d.timeIntervalSince1970, forKey: "com.quantummessenger.keyCreatedAt")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "com.quantummessenger.keyCreatedAt")
+            }
+        }
+    }
+
+    /// Formatted "Name <email>" string for key headers
+    var userId: String {
+        let n = userName.trimmingCharacters(in: .whitespaces)
+        let e = userEmail.trimmingCharacters(in: .whitespaces)
+        if n.isEmpty && e.isEmpty { return "QuantumMessenger User" }
+        if e.isEmpty { return n }
+        return "\(n) <\(e)>"
+    }
+
+    /// Formatted key creation date
+    var keyCreatedAtFormatted: String {
+        guard let date = keyCreatedAt else { return "Unknown" }
+        let fmt = DateFormatter()
+        fmt.dateStyle = .medium
+        fmt.timeStyle = .short
+        return fmt.string(from: date)
+    }
+
     var hasKeyPair: Bool {
         privateKey != nil && publicKey != nil
     }
@@ -64,6 +100,9 @@ final class AppState {
             self.signingPrivateKey = sigSk
             self.signingPublicKey = sigPk
             try KeychainService.saveSigningKeyPair(privateKey: sigSk, publicKey: sigPk)
+
+            // Record creation time
+            keyCreatedAt = Date()
         } catch {
             setError("Key generation failed: \(error.localizedDescription)")
         }
@@ -75,6 +114,7 @@ final class AppState {
         publicKey = nil
         signingPrivateKey = nil
         signingPublicKey = nil
+        keyCreatedAt = nil
         KeychainService.deleteKeyPair()
         KeychainService.deleteSigningKeyPair()
     }
@@ -321,6 +361,11 @@ final class AppState {
         signingPublicKey = KeychainService.loadSigningPublicKey()
         contacts = KeychainService.loadContacts()
         messages = KeychainService.loadMessages()
+        userName = UserDefaults.standard.string(forKey: "com.quantummessenger.userName") ?? ""
+        userEmail = UserDefaults.standard.string(forKey: "com.quantummessenger.userEmail") ?? ""
+        if let ts = UserDefaults.standard.object(forKey: "com.quantummessenger.keyCreatedAt") as? Double {
+            keyCreatedAt = Date(timeIntervalSince1970: ts)
+        }
     }
 
     private func setError(_ message: String) {
